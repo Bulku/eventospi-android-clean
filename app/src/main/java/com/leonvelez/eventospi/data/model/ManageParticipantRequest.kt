@@ -1,8 +1,14 @@
 package com.leonvelez.eventospi.data.model
 
+import com.google.gson.annotations.SerializedName
+
 data class ManageParticipantRequest(
+    @SerializedName("EventId")
     val eventId: Int,
-    val cancellationReason: String = "",
-    val userId: Int? = null,
-    val approve: Boolean? = null
+
+    @SerializedName("UserId")
+    val userId: String,
+
+    @SerializedName("Approve")
+    val approve: Boolean
 )

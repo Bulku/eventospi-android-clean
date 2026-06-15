@@ -1,150 +1,162 @@
 package com.leonvelez.eventospi.data.remote
 
-import com.leonvelez.eventospi.data.model.LoginResponse
+import com.leonvelez.eventospi.data.model.EventParticipantResponse
 import com.leonvelez.eventospi.data.model.EventRequest
 import com.leonvelez.eventospi.data.model.EventResponse
-import com.leonvelez.eventospi.data.model.RegistrationRequest
-import com.leonvelez.eventospi.data.model.EventParticipantResponse
-import com.leonvelez.eventospi.data.model.ManageParticipantRequest
-import com.leonvelez.eventospi.data.model.UserAuthenticatedResponse
-import com.leonvelez.eventospi.data.model.UserAuthenticatedMessageResponse
+import com.leonvelez.eventospi.data.model.LoginResponse
 import com.leonvelez.eventospi.data.model.ReactionSummaryResponse
-import okhttp3.ResponseBody
+import com.leonvelez.eventospi.data.model.RegistrationRequest
+import com.leonvelez.eventospi.data.model.UserAuthenticatedMessageResponse
+import com.leonvelez.eventospi.data.model.UserChangePasswordRequest
+import com.leonvelez.eventospi.data.model.UserLoginRequest
+import com.leonvelez.eventospi.data.model.UserRegisterRequest
+import com.leonvelez.eventospi.data.model.ManageParticipantRequest
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
+import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
-import retrofit2.http.POST
-import retrofit2.http.Query
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Header
-import retrofit2.http.DELETE
-import retrofit2.http.Path
-import retrofit2.http.PUT
 import retrofit2.http.Multipart
+import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Part
-
-
-
+import retrofit2.http.Path
+import retrofit2.http.Query
 
 interface AuthApi {
 
-    @POST("Login")
+    // -------------------------
+    // User
+    // -------------------------
+
+    @POST("User/Login")
     suspend fun login(
-        @Query("Email") email: String,
-        @Query("Password") password: String
+        @Body request: UserLoginRequest
     ): Response<LoginResponse>
 
-    @GET("GetUserAuthenticated")
+    @POST("User/Register")
+    suspend fun register(
+        @Body request: UserRegisterRequest
+    ): Response<ResponseBody>
+
+    @GET("User/GetUserAuthenticated")
     suspend fun getUserAuthenticated(
         @Header("Authorization") token: String
     ): Response<UserAuthenticatedMessageResponse>
 
-
-    @POST("ChangePassword")
+    @POST("User/ChangePassword")
     suspend fun changePassword(
         @Header("Authorization") token: String,
-        @Query("currentPassword") currentPassword: String,
-        @Query("newPassword") newPassword: String,
-        @Query("confirmNewPassword") confirmNewPassword: String
+        @Body request: UserChangePasswordRequest
     ): Response<ResponseBody>
 
-    @POST("Register")
-    suspend fun register(
-        @Query("FirstName") firstName: String,
-        @Query("LastName") lastName: String,
-        @Query("UserName") userName: String,
-        @Query("Email") email: String,
-        @Query("Password") password: String,
-        @Query("ConfirmPassword") confirmPassword: String
+    @Multipart
+    @POST("User/UploadImageProfileAsync")
+    suspend fun uploadProfileImage(
+        @Header("Authorization") token: String,
+        @Part file: MultipartBody.Part
     ): Response<ResponseBody>
 
-    @POST("api/Event/Create")
+
+    // -------------------------
+    // Event
+    // -------------------------
+
+    @POST("Event/Create")
     suspend fun createEvent(
         @Header("Authorization") token: String,
         @Body event: EventRequest
     ): Response<EventResponse>
-    @GET("api/Event/GetEvents")
+
+    @GET("Event/GetEvents")
     suspend fun getEvents(
         @Header("Authorization") token: String
     ): Response<List<EventResponse>>
-    @DELETE("api/Event/Delete/{id}")
+
+    @GET("Event/GetEventsIAmRegistered")
+    suspend fun getEventsIAmRegistered(
+        @Header("Authorization") token: String
+    ): Response<List<EventResponse>>
+
+    @DELETE("Event/Delete/{id}")
     suspend fun deleteEvent(
         @Header("Authorization") token: String,
         @Path("id") id: Int
     ): Response<Unit>
-    @PUT("api/Event/Update")
+
+    @PUT("Event/Update")
     suspend fun updateEvent(
         @Header("Authorization") token: String,
         @Body event: EventRequest
     ): Response<EventResponse>
-    @POST("RegisterToEvent")
-    suspend fun registerToEvent(
-        @Header("Authorization") token: String,
-        @Query("EventId") eventId: Int,
-        @Query("CancellationReason") cancellationReason: String = ""
-    ): Response<EventParticipantResponse>
-
-    @PUT("CancelRegistration")
-    suspend fun cancelRegistration(
-        @Header("Authorization") token: String,
-        @Query("eventId") eventId: Int,
-        @Query("cancellationReason") cancellationReason: String = ""
-    ): Response<Unit>
-
-    @GET("GetParticipantsByEventId")
-    suspend fun getParticipantsByEventId(
-        @Header("Authorization") token: String,
-        @Query("eventId") eventId: Int
-    ): Response<List<EventParticipantResponse>>
 
     @Multipart
-    @POST("api/Event/UploadImageAsync")
+    @POST("Event/UploadImageAsync")
     suspend fun uploadEventImage(
         @Header("Authorization") token: String,
         @Part("EventId") eventId: RequestBody,
         @Part formFile: MultipartBody.Part
     ): Response<ResponseBody>
-    @GET("api/Event/GetEventsIAmRegistered")
-    suspend fun getEventsIAmRegistered(
-        @Header("Authorization") token: String
-    ): Response<List<EventResponse>>
 
-    @GET("GetPendingRequestsAsync")
+
+    // -------------------------
+    // EventParticipant
+    // -------------------------
+
+    @POST("EventParticipant/RegisterToEvent")
+    suspend fun registerToEvent(
+        @Header("Authorization") token: String,
+        @Body request: RegistrationRequest
+    ): Response<EventParticipantResponse>
+
+    @PUT("EventParticipant/CancelRegistration")
+    suspend fun cancelRegistration(
+        @Header("Authorization") token: String,
+        @Body request: RegistrationRequest
+    ): Response<EventParticipantResponse>
+
+    @GET("EventParticipant/GetParticipantsByEventId")
+    suspend fun getParticipantsByEventId(
+        @Header("Authorization") token: String,
+        @Query("eventId") eventId: Int
+    ): Response<List<EventParticipantResponse>>
+
+    @GET("EventParticipant/GetPendingRequestsAsync")
     suspend fun getPendingRequestsAsync(
         @Header("Authorization") token: String,
         @Query("eventId") eventId: Int
     ): Response<List<EventParticipantResponse>>
 
-    @PUT("ApproveOrRejectParticipant")
+    @PUT("EventParticipant/ApproveOrRejectParticipant")
     suspend fun approveOrRejectParticipant(
         @Header("Authorization") token: String,
         @Body request: ManageParticipantRequest
     ): Response<EventParticipantResponse>
 
-    @Multipart
-    @POST("UploadImageProfileAsync")
-    suspend fun uploadProfileImage(
-        @Header("Authorization") token: String,
-        @Part file: MultipartBody.Part
-    ): Response<ResponseBody>
-    @POST("api/Reaction/ReactToEvent")
+
+    // -------------------------
+    // Reaction
+    // -------------------------
+
+    @POST("Reaction/ReactToEvent")
     suspend fun reactToEvent(
         @Header("Authorization") token: String,
         @Query("eventId") eventId: Int,
         @Query("reactionTypeId") reactionTypeId: Int
     ): Response<Unit>
 
-    @GET("api/Reaction/GetReactionsByEventId")
+    @GET("Reaction/GetReactionsByEventId")
     suspend fun getReactionsByEventId(
         @Header("Authorization") token: String,
         @Query("eventId") eventId: Int
     ): Response<ReactionSummaryResponse>
 
-    @DELETE("api/Reaction/Delete/{eventId}")
+    @DELETE("Reaction/Delete/{eventId}")
     suspend fun deleteReaction(
         @Header("Authorization") token: String,
         @Path("eventId") eventId: Int
     ): Response<Unit>
-
 }

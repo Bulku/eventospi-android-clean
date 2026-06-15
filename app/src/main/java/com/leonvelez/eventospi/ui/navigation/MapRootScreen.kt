@@ -3,17 +3,17 @@ package com.leonvelez.eventospi.ui.navigation
 import android.net.Uri
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import com.leonvelez.eventospi.data.TokenManager
 import com.leonvelez.eventospi.data.model.EventResponse
 import com.leonvelez.eventospi.data.model.ReactionSummaryResponse
 import com.leonvelez.eventospi.data.remote.RetrofitInstance
-import com.leonvelez.eventospi.data.TokenManager
 import com.leonvelez.eventospi.ui.model.EventReactionType
 import com.leonvelez.eventospi.ui.model.MapVisualFilter
 import com.leonvelez.eventospi.ui.screens.auth.LoginScreen
@@ -28,6 +28,7 @@ import com.leonvelez.eventospi.ui.screens.map.MapShellScreen
 import com.leonvelez.eventospi.ui.screens.profile.ChangePasswordScreen
 import com.leonvelez.eventospi.ui.screens.profile.ProfileHubScreen
 import com.leonvelez.eventospi.ui.screens.profile.ProfileImageScreen
+import com.leonvelez.eventospi.utils.RegistrationSessionState
 import com.leonvelez.eventospi.utils.cancelRegistrationFailureMessage
 import com.leonvelez.eventospi.utils.clearEventRegistrationCancelledForSession
 import com.leonvelez.eventospi.utils.extractUserNameFromAuthMessage
@@ -35,6 +36,7 @@ import com.leonvelez.eventospi.utils.markEventRegistrationCancelledForSession
 import com.leonvelez.eventospi.utils.registrationFailureMessage
 import com.leonvelez.eventospi.utils.resetSessionCancelledRegistrations
 import com.leonvelez.eventospi.utils.toBackendId
+import com.leonvelez.eventospi.data.model.RegistrationRequest
 import kotlinx.coroutines.launch
 
 @Composable
@@ -64,6 +66,33 @@ fun MapRootScreen() {
     var visualFilter by remember { mutableStateOf(MapVisualFilter.Todos) }
     var selectedCategoryFilter by remember { mutableStateOf<Int?>(null) }
 
+    fun registrationUserKey(): String {
+        return currentUserName.ifBlank {
+            registeredEmail.ifBlank {
+                "unknown_user"
+            }
+        }
+    }
+
+    fun loadCancelledEventsForCurrentUser() {
+        val userKey = registrationUserKey()
+
+        if (userKey == "unknown_user") {
+            return
+        }
+
+        val storedCancelledEventIds = RegistrationSessionState.getCancelledEventIds(
+            context = context,
+            userKey = userKey
+        )
+
+        cancelledEventIds = storedCancelledEventIds
+
+        registeredMapEvents = registeredMapEvents.filterNot { event ->
+            storedCancelledEventIds.contains(event.id)
+        }
+    }
+
     fun reloadMapEvents() {
         scope.launch {
             try {
@@ -92,6 +121,7 @@ fun MapRootScreen() {
             }
         }
     }
+
     fun reloadCurrentUser() {
         scope.launch {
             try {
@@ -132,7 +162,25 @@ fun MapRootScreen() {
                 )
 
                 if (response.isSuccessful) {
-                    registeredMapEvents = response.body().orEmpty()
+                    val userKey = registrationUserKey()
+
+                    val storedCancelledEventIds =
+                        if (userKey != "unknown_user") {
+                            RegistrationSessionState.getCancelledEventIds(
+                                context = context,
+                                userKey = userKey
+                            )
+                        } else {
+                            cancelledEventIds
+                        }
+
+                    cancelledEventIds = storedCancelledEventIds
+
+                    val backendRegisteredEvents = response.body().orEmpty()
+
+                    registeredMapEvents = backendRegisteredEvents.filterNot { event ->
+                        storedCancelledEventIds.contains(event.id)
+                    }
                 } else {
                     registeredMapEvents = emptyList()
                 }
@@ -173,14 +221,35 @@ fun MapRootScreen() {
 
                 val response = RetrofitInstance.api.registerToEvent(
                     token = "Bearer $savedToken",
-                    eventId = event.id,
-                    cancellationReason = ""
+                    request = RegistrationRequest(
+                        eventId = event.id,
+                        cancellationReason = ""
+                    )
                 )
 
                 if (response.isSuccessful) {
-                    cancelledEventIds = clearEventRegistrationCancelledForSession(cancelledEventIds, event.id)
+                    val userKey = registrationUserKey()
+
+                    if (userKey != "unknown_user") {
+                        RegistrationSessionState.removeCancelledEvent(
+                            context = context,
+                            userKey = userKey,
+                            eventId = event.id
+                        )
+                    }
+
+                    cancelledEventIds = clearEventRegistrationCancelledForSession(
+                        cancelledEventIds,
+                        event.id
+                    )
+
                     reloadRegisteredMapEvents()
-                    mapMessage = "Inscripción realizada correctamente"
+
+                    mapMessage = if (event.isPublic) {
+                        "Inscripción realizada correctamente"
+                    } else {
+                        "Solicitud enviada correctamente. Espera aprobación del creador."
+                    }
                 } else {
                     val errorText = response.errorBody()?.string().orEmpty()
 
@@ -194,6 +263,7 @@ fun MapRootScreen() {
             }
         }
     }
+
     fun cancelRegistrationForSelectedEvent() {
         val event = selectedMapEvent ?: return
 
@@ -208,15 +278,36 @@ fun MapRootScreen() {
 
                 val response = RetrofitInstance.api.cancelRegistration(
                     token = "Bearer $savedToken",
-                    eventId = event.id,
-                    cancellationReason = ""
+                    request = RegistrationRequest(
+                        eventId = event.id,
+                        cancellationReason = ""
+                    )
                 )
 
                 val errorText = response.errorBody()?.string().orEmpty()
 
                 if (response.isSuccessful) {
-                    cancelledEventIds = markEventRegistrationCancelledForSession(cancelledEventIds, event.id)
+                    val userKey = registrationUserKey()
+
+                    if (userKey != "unknown_user") {
+                        RegistrationSessionState.markEventAsCancelled(
+                            context = context,
+                            userKey = userKey,
+                            eventId = event.id
+                        )
+                    }
+
+                    cancelledEventIds = markEventRegistrationCancelledForSession(
+                        cancelledEventIds,
+                        event.id
+                    )
+
+                    registeredMapEvents = registeredMapEvents.filterNot { registeredEvent ->
+                        registeredEvent.id == event.id
+                    }
+
                     reloadRegisteredMapEvents()
+
                     mapMessage = "Inscripción cancelada"
                 } else {
                     mapMessage = cancelRegistrationFailureMessage(
@@ -261,6 +352,7 @@ fun MapRootScreen() {
             }
         }
     }
+
     fun loadSelectedEventParticipantsCount(eventId: Int) {
         scope.launch {
             try {
@@ -286,6 +378,7 @@ fun MapRootScreen() {
             }
         }
     }
+
     fun loadReactionSummary(eventId: Int) {
         scope.launch {
             try {
@@ -362,6 +455,13 @@ fun MapRootScreen() {
     LaunchedEffect(isLoggedIn) {
         reloadAllMapData()
     }
+
+    LaunchedEffect(isLoggedIn, currentUserName, registeredEmail) {
+        if (isLoggedIn) {
+            loadCancelledEventsForCurrentUser()
+        }
+    }
+
     LaunchedEffect(selectedMapEvent?.id) {
         val selectedId = selectedMapEvent?.id
 
@@ -512,6 +612,7 @@ fun MapRootScreen() {
                 }
             )
         }
+
         "dashboard" -> {
             DashboardScreen(
                 onBackToHome = {
@@ -523,18 +624,39 @@ fun MapRootScreen() {
 
         "registeredEvents" -> {
             RegisteredEventsScreen(
+                cancelledEventIds = cancelledEventIds,
                 onBackToHome = {
                     selectedMapEvent = null
                     mapMessage = ""
                     currentScreen = "map"
                 },
                 onRegisteredEventsChanged = { updatedEvents ->
-                    registeredMapEvents = updatedEvents
+                    registeredMapEvents = updatedEvents.filterNot { event ->
+                        cancelledEventIds.contains(event.id)
+                    }
+
                     selectedMapEvent = null
                     mapMessage = ""
                 },
                 onEventCancelled = { eventId ->
-                    cancelledEventIds = markEventRegistrationCancelledForSession(cancelledEventIds, eventId)
+                    val userKey = registrationUserKey()
+
+                    if (userKey != "unknown_user") {
+                        RegistrationSessionState.markEventAsCancelled(
+                            context = context,
+                            userKey = userKey,
+                            eventId = eventId
+                        )
+                    }
+
+                    cancelledEventIds = markEventRegistrationCancelledForSession(
+                        cancelledEventIds,
+                        eventId
+                    )
+
+                    registeredMapEvents = registeredMapEvents.filterNot { event ->
+                        event.id == eventId
+                    }
                 }
             )
         }
@@ -555,6 +677,7 @@ fun MapRootScreen() {
                 initialSelectedEventId = selectedUpdateEventId
             )
         }
+
         "profileHub" -> {
             ProfileHubScreen(
                 email = registeredEmail,
@@ -573,6 +696,7 @@ fun MapRootScreen() {
                 }
             )
         }
+
         "profileImage" -> {
             ProfileImageScreen(
                 onBackToHome = { currentScreen = "map" },

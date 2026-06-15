@@ -5,10 +5,12 @@ import android.app.TimePickerDialog
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -22,13 +24,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.leonvelez.eventospi.data.TokenManager
 import com.leonvelez.eventospi.data.model.EventRequest
 import com.leonvelez.eventospi.data.remote.RetrofitInstance
-import com.leonvelez.eventospi.data.TokenManager
 import com.leonvelez.eventospi.ui.components.CategoryDropdownField
 import com.leonvelez.eventospi.ui.components.FormScreenContainer
 import com.leonvelez.eventospi.ui.components.FormSectionTitle
@@ -38,9 +40,6 @@ import com.leonvelez.eventospi.utils.createImagePartFromUri
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
-import java.time.format.DateTimeFormatter
-import java.time.LocalDateTime
-import java.util.Calendar
 
 @Composable
 fun CreateEventScreen(
@@ -58,6 +57,8 @@ fun CreateEventScreen(
     var maxParticipants by remember { mutableStateOf("") }
     var price by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf<EventCategory?>(null) }
+
+    var isPublic by remember { mutableStateOf(true) }
 
     var latitude by remember { mutableStateOf(initialLatitude?.toString().orEmpty()) }
     var longitude by remember { mutableStateOf(initialLongitude?.toString().orEmpty()) }
@@ -283,6 +284,45 @@ fun CreateEventScreen(
 
         Spacer(modifier = Modifier.height(14.dp))
 
+        FormSectionTitle("Tipo de evento")
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Button(
+                onClick = { isPublic = true },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(14.dp),
+                enabled = !isPublic
+            ) {
+                Text("Público")
+            }
+
+            Button(
+                onClick = { isPublic = false },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(14.dp),
+                enabled = isPublic
+            ) {
+                Text("Privado")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = if (isPublic) {
+                "Los usuarios quedarán inscritos directamente al evento."
+            } else {
+                "Los usuarios deberán enviar una solicitud y esperar aprobación."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.DarkGray
+        )
+
+        Spacer(modifier = Modifier.height(14.dp))
+
         PickerLikeField(
             label = "Imagen del evento",
             value = if (selectedImageUri == null) "" else "Imagen seleccionada",
@@ -332,7 +372,7 @@ fun CreateEventScreen(
                             longitude = longitude.toDouble(),
                             address = address,
                             maxParticipants = maxParticipants.toInt(),
-                            isPublic = true,
+                            isPublic = isPublic,
                             category = selectedCategory!!.backendValue,
                             price = if (price.isBlank()) null else price.toDouble(),
                             imageUrl = null

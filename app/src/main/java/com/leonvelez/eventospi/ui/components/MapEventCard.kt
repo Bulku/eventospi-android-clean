@@ -227,7 +227,7 @@ fun MapEventCard(
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
                     ) {
                         Text(
-                            text = "Cancelado",
+                            text = "Inscripción cancelada",
                             fontSize = 13.sp
                         )
                     }
@@ -251,7 +251,11 @@ fun MapEventCard(
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
                     ) {
                         Text(
-                            text = "Inscribirme",
+                            text = if (event.isPublic) {
+                                "Inscribirme"
+                            } else {
+                                "Solicitar inscripción"
+                            },
                             fontSize = 13.sp
                         )
                     }

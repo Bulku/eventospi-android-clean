@@ -33,10 +33,39 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.leonvelez.eventospi.data.model.EventParticipantResponse
 import com.leonvelez.eventospi.data.model.EventResponse
-import com.leonvelez.eventospi.ui.screens.events.participantStatusLabel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.URL
+
+private fun participantStatusLabel(status: Any?): String {
+    return when (status) {
+        null -> "Sin estado"
+
+        is Int -> {
+            when (status) {
+                0 -> "Pendiente"
+                1 -> "Aprobado"
+                2 -> "Rechazado"
+                3 -> "Cancelado"
+                4 -> "Asistió"
+                else -> "Desconocido"
+            }
+        }
+
+        is String -> {
+            when (status.trim().lowercase()) {
+                "0", "pending", "pendiente" -> "Pendiente"
+                "1", "approved", "aprobado" -> "Aprobado"
+                "2", "rejected", "rechazado" -> "Rechazado"
+                "3", "cancelled", "canceled", "cancelado" -> "Cancelado"
+                "4", "attended", "asistio", "asistió" -> "Asistió"
+                else -> status
+            }
+        }
+
+        else -> status.toString()
+    }
+}
 
 @Composable
 fun EventListCard(

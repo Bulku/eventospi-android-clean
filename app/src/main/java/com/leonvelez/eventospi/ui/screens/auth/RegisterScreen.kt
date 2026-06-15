@@ -37,6 +37,7 @@ import com.leonvelez.eventospi.ui.components.FormScreenContainer
 import com.leonvelez.eventospi.ui.components.FormSectionTitle
 import com.leonvelez.eventospi.ui.components.ValidationErrorText
 import kotlinx.coroutines.launch
+import com.leonvelez.eventospi.data.model.UserRegisterRequest
 
 @Composable
 fun RegisterScreen(
@@ -224,12 +225,14 @@ fun RegisterScreen(
                         resultText = "Creando cuenta..."
 
                         val response = RetrofitInstance.api.register(
-                            firstName = firstName,
-                            lastName = lastName,
-                            userName = userName,
-                            email = email,
-                            password = password,
-                            confirmPassword = password
+                            UserRegisterRequest(
+                                firstName = firstName,
+                                lastName = lastName,
+                                userName = userName,
+                                email = email,
+                                password = password,
+                                confirmPassword = password
+                            )
                         )
 
                         if (response.isSuccessful) {

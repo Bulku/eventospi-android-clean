@@ -34,6 +34,7 @@ import com.leonvelez.eventospi.data.TokenManager
 import com.leonvelez.eventospi.ui.components.FormScreenContainer
 import com.leonvelez.eventospi.ui.components.ValidationErrorText
 import kotlinx.coroutines.launch
+import com.leonvelez.eventospi.data.model.UserChangePasswordRequest
 
 @Composable
 fun ChangePasswordScreen(
@@ -215,9 +216,11 @@ fun ChangePasswordScreen(
 
                         val response = RetrofitInstance.api.changePassword(
                             token = "Bearer $savedToken",
-                            currentPassword = currentPassword,
-                            newPassword = newPassword,
-                            confirmNewPassword = confirmPassword
+                            request = UserChangePasswordRequest(
+                                currentPassword = currentPassword,
+                                newPassword = newPassword,
+                                confirmNewPassword = confirmPassword
+                            )
                         )
 
                         if (response.isSuccessful) {

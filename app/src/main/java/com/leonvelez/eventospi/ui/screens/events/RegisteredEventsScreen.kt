@@ -2,11 +2,11 @@ package com.leonvelez.eventospi.ui.screens.events
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -15,19 +15,20 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.leonvelez.eventospi.data.model.EventResponse
-import com.leonvelez.eventospi.data.remote.RetrofitInstance
 import com.leonvelez.eventospi.data.TokenManager
+import com.leonvelez.eventospi.data.model.EventResponse
+import com.leonvelez.eventospi.data.model.RegistrationRequest
+import com.leonvelez.eventospi.data.remote.RetrofitInstance
 import com.leonvelez.eventospi.ui.components.FormScreenContainer
 import com.leonvelez.eventospi.ui.components.InfoPill
 import com.leonvelez.eventospi.utils.cancelRegistrationFailureMessage
@@ -35,19 +36,9 @@ import com.leonvelez.eventospi.utils.eventCategoryDisplayLabel
 import com.leonvelez.eventospi.utils.formatEventDateCompact
 import kotlinx.coroutines.launch
 
-fun participantStatusLabel(status: Int): String {
-    return when (status) {
-        0 -> "Pendiente"
-        1 -> "Aprobado"
-        2 -> "Rechazado"
-        3 -> "Cancelado"
-        4 -> "Asistió"
-        else -> "Desconocido"
-    }
-}
-
 @Composable
 fun RegisteredEventsScreen(
+    cancelledEventIds: Set<Int>,
     onBackToHome: () -> Unit,
     onRegisteredEventsChanged: (List<EventResponse>) -> Unit,
     onEventCancelled: (Int) -> Unit
@@ -57,7 +48,12 @@ fun RegisteredEventsScreen(
     val tokenManager = remember { TokenManager(context) }
 
     var events by remember { mutableStateOf<List<EventResponse>>(emptyList()) }
+    var screenCancelledEventIds by remember { mutableStateOf(cancelledEventIds) }
     var resultText by remember { mutableStateOf("Cargando mis inscripciones...") }
+
+    LaunchedEffect(cancelledEventIds) {
+        screenCancelledEventIds = cancelledEventIds
+    }
 
     suspend fun loadRegisteredEvents() {
         val savedToken = tokenManager.getToken()
@@ -75,8 +71,14 @@ fun RegisteredEventsScreen(
 
         if (response.isSuccessful) {
             val loadedEvents = response.body().orEmpty()
+
             events = loadedEvents
-            onRegisteredEventsChanged(loadedEvents)
+
+            onRegisteredEventsChanged(
+                loadedEvents.filterNot { event ->
+                    screenCancelledEventIds.contains(event.id)
+                }
+            )
 
             resultText = if (loadedEvents.isEmpty()) {
                 "No tienes eventos inscritos"
@@ -110,6 +112,9 @@ fun RegisteredEventsScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 events.forEach { registeredEvent ->
+                    val isCancelledLocally =
+                        screenCancelledEventIds.contains(registeredEvent.id)
+
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(18.dp),
@@ -158,6 +163,10 @@ fun RegisteredEventsScreen(
 
                             Button(
                                 onClick = {
+                                    if (isCancelledLocally) {
+                                        return@Button
+                                    }
+
                                     scope.launch {
                                         try {
                                             val savedToken = tokenManager.getToken()
@@ -167,17 +176,32 @@ fun RegisteredEventsScreen(
                                                 return@launch
                                             }
 
-                                            val response = RetrofitInstance.api.cancelRegistration(
-                                                token = "Bearer $savedToken",
-                                                eventId = registeredEvent.id,
-                                                cancellationReason = ""
-                                            )
+                                            val response =
+                                                RetrofitInstance.api.cancelRegistration(
+                                                    token = "Bearer $savedToken",
+                                                    request = RegistrationRequest(
+                                                        eventId = registeredEvent.id,
+                                                        cancellationReason = ""
+                                                    )
+                                                )
 
-                                            val errorText = response.errorBody()?.string().orEmpty()
+                                            val errorText =
+                                                response.errorBody()?.string().orEmpty()
 
                                             if (response.isSuccessful) {
-                                                loadRegisteredEvents()
+                                                val updatedCancelledIds =
+                                                    screenCancelledEventIds + registeredEvent.id
+
+                                                screenCancelledEventIds = updatedCancelledIds
+
                                                 onEventCancelled(registeredEvent.id)
+
+                                                onRegisteredEventsChanged(
+                                                    events.filterNot { event ->
+                                                        updatedCancelledIds.contains(event.id)
+                                                    }
+                                                )
+
                                                 resultText = "Inscripción cancelada"
                                             } else {
                                                 resultText = cancelRegistrationFailureMessage(
@@ -186,14 +210,22 @@ fun RegisteredEventsScreen(
                                                 )
                                             }
                                         } catch (e: Exception) {
-                                            resultText = "Excepción al cancelar inscripción: ${e.message}"
+                                            resultText =
+                                                "Excepción al cancelar inscripción: ${e.message}"
                                         }
                                     }
                                 },
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(14.dp)
+                                shape = RoundedCornerShape(14.dp),
+                                enabled = !isCancelledLocally
                             ) {
-                                Text("Cancelar inscripción")
+                                Text(
+                                    if (isCancelledLocally) {
+                                        "Inscripción cancelada"
+                                    } else {
+                                        "Cancelar inscripción"
+                                    }
+                                )
                             }
                         }
                     }

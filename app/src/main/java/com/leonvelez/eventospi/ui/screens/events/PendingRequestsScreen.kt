@@ -3,34 +3,35 @@ package com.leonvelez.eventospi.ui.screens.events
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.leonvelez.eventospi.data.TokenManager
 import com.leonvelez.eventospi.data.model.EventParticipantResponse
 import com.leonvelez.eventospi.data.model.EventResponse
 import com.leonvelez.eventospi.data.model.ManageParticipantRequest
 import com.leonvelez.eventospi.data.remote.RetrofitInstance
-import com.leonvelez.eventospi.data.TokenManager
 import com.leonvelez.eventospi.ui.components.FormScreenContainer
 import com.leonvelez.eventospi.utils.extractUserNameFromAuthMessage
 import com.leonvelez.eventospi.utils.formatEventDateCompact
@@ -46,20 +47,34 @@ fun PendingRequestsScreen(
     val tokenManager = remember { TokenManager(context) }
 
     var currentUserName by remember { mutableStateOf("") }
-    var creatorEvents by remember { mutableStateOf<List<EventResponse>>(emptyList()) }
+    var creatorPrivateEvents by remember { mutableStateOf<List<EventResponse>>(emptyList()) }
     var selectedEvent by remember { mutableStateOf<EventResponse?>(null) }
     var pendingParticipants by remember { mutableStateOf<List<EventParticipantResponse>>(emptyList()) }
     var resultText by remember { mutableStateOf("Cargando...") }
+    var isLoading by remember { mutableStateOf(false) }
 
-    suspend fun loadCurrentUserAndEvents() {
+    fun participantName(participant: EventParticipantResponse): String {
+        val fullName = "${participant.userFirstName} ${participant.userLastName}".trim()
+
+        return when {
+            fullName.isNotBlank() -> fullName
+            participant.userName.isNotBlank() -> participant.userName
+            else -> "Usuario ID: ${participant.userId}"
+        }
+    }
+
+    suspend fun loadCurrentUserAndPrivateEvents() {
         val savedToken = tokenManager.getToken()
 
         if (savedToken.isNullOrBlank()) {
             currentUserName = ""
-            creatorEvents = emptyList()
+            creatorPrivateEvents = emptyList()
             resultText = "No hay sesión activa"
             return
         }
+
+        isLoading = true
+        resultText = "Cargando eventos privados..."
 
         val userResponse = RetrofitInstance.api.getUserAuthenticated(
             token = "Bearer $savedToken"
@@ -78,32 +93,43 @@ fun PendingRequestsScreen(
         if (eventsResponse.isSuccessful) {
             val allEvents = eventsResponse.body().orEmpty()
 
-            creatorEvents = allEvents.filter { event ->
+            creatorPrivateEvents = allEvents.filter { event ->
                 isEventOwnedByUserName(
                     currentUserName = currentUserName,
                     event = event
-                )
+                ) && !event.isPublic
             }
 
-            resultText = if (creatorEvents.isEmpty()) {
-                "No tienes eventos creados"
+            resultText = if (creatorPrivateEvents.isEmpty()) {
+                "No tienes eventos privados creados"
             } else {
                 ""
             }
         } else {
-            creatorEvents = emptyList()
+            creatorPrivateEvents = emptyList()
             resultText = "Error cargando eventos: ${eventsResponse.code()}"
         }
+
+        isLoading = false
     }
 
     suspend fun loadPendingParticipantsForSelectedEvent() {
         val savedToken = tokenManager.getToken()
         val event = selectedEvent
 
-        if (savedToken.isNullOrBlank() || event == null) {
+        if (savedToken.isNullOrBlank()) {
+            pendingParticipants = emptyList()
+            resultText = "No hay sesión activa"
+            return
+        }
+
+        if (event == null) {
             pendingParticipants = emptyList()
             return
         }
+
+        isLoading = true
+        resultText = "Cargando solicitudes pendientes..."
 
         val response = RetrofitInstance.api.getPendingRequestsAsync(
             token = "Bearer $savedToken",
@@ -112,6 +138,7 @@ fun PendingRequestsScreen(
 
         if (response.isSuccessful) {
             pendingParticipants = response.body().orEmpty()
+
             resultText = if (pendingParticipants.isEmpty()) {
                 "No hay solicitudes pendientes para este evento"
             } else {
@@ -119,23 +146,123 @@ fun PendingRequestsScreen(
             }
         } else {
             pendingParticipants = emptyList()
-            resultText = "Error cargando solicitudes: ${response.code()}"
+            val errorText = response.errorBody()?.string().orEmpty()
+            resultText = "Error cargando solicitudes: ${response.code()} - $errorText"
+        }
+
+        isLoading = false
+    }
+
+    fun manageParticipant(
+        participant: EventParticipantResponse,
+        approve: Boolean
+    ) {
+        scope.launch {
+            val savedToken = tokenManager.getToken()
+            val event = selectedEvent
+
+            if (savedToken.isNullOrBlank()) {
+                resultText = "No hay sesión activa"
+                return@launch
+            }
+
+            if (event == null) {
+                resultText = "No hay evento seleccionado"
+                return@launch
+            }
+
+            val participantUserId = participant.userId
+
+            if (participantUserId.isNullOrBlank()) {
+                resultText = "No se pudo obtener el usuario del participante"
+                return@launch
+            }
+
+            try {
+                isLoading = true
+                resultText = if (approve) {
+                    "Aprobando participante..."
+                } else {
+                    "Rechazando participante..."
+                }
+
+                val response = RetrofitInstance.api.approveOrRejectParticipant(
+                    token = "Bearer $savedToken",
+                    request = ManageParticipantRequest(
+                        eventId = event.id,
+                        userId = participantUserId,
+                        approve = approve
+                    )
+                )
+
+                if (response.isSuccessful) {
+                    pendingParticipants = pendingParticipants.filterNot {
+                        it.userId == participant.userId
+                    }
+
+                    resultText = if (approve) {
+                        "Participante aprobado correctamente"
+                    } else {
+                        "Participante rechazado correctamente"
+                    }
+                } else {
+                    val errorText = response.errorBody()?.string().orEmpty()
+
+                    if (response.code() == 500) {
+                        loadPendingParticipantsForSelectedEvent()
+
+                        val stillPending = pendingParticipants.any {
+                            it.userId == participant.userId
+                        }
+
+                        resultText = if (!stillPending) {
+                            if (approve) {
+                                "Participante aprobado correctamente"
+                            } else {
+                                "Participante rechazado correctamente"
+                            }
+                        } else {
+                            if (approve) {
+                                "Error al aprobar: 500 - $errorText"
+                            } else {
+                                "Error al rechazar: 500 - $errorText"
+                            }
+                        }
+                    } else {
+                        resultText = if (approve) {
+                            "Error al aprobar: ${response.code()} - $errorText"
+                        } else {
+                            "Error al rechazar: ${response.code()} - $errorText"
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                resultText = if (approve) {
+                    "Excepción al aprobar: ${e.message}"
+                } else {
+                    "Excepción al rechazar: ${e.message}"
+                }
+            } finally {
+                isLoading = false
+            }
         }
     }
 
     LaunchedEffect(Unit) {
         try {
-            loadCurrentUserAndEvents()
+            loadCurrentUserAndPrivateEvents()
         } catch (e: Exception) {
+            isLoading = false
             resultText = "Excepción cargando datos: ${e.message}"
         }
     }
 
-    LaunchedEffect(selectedEvent) {
+    LaunchedEffect(selectedEvent?.id) {
         if (selectedEvent != null) {
             try {
                 loadPendingParticipantsForSelectedEvent()
             } catch (e: Exception) {
+                isLoading = false
                 resultText = "Excepción cargando solicitudes: ${e.message}"
             }
         }
@@ -144,20 +271,27 @@ fun PendingRequestsScreen(
     if (selectedEvent == null) {
         FormScreenContainer(
             title = "Solicitudes pendientes",
-            subtitle = "Selecciona uno de tus eventos para revisar participantes"
+            subtitle = "Selecciona un evento privado para revisar solicitudes"
         ) {
-            if (creatorEvents.isEmpty()) {
-                Text(resultText)
+            if (creatorPrivateEvents.isEmpty()) {
+                Text(
+                    text = resultText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.DarkGray
+                )
             } else {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    creatorEvents.forEach { eventItem ->
+                    creatorPrivateEvents.forEach { eventItem ->
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { selectedEvent = eventItem },
+                                .clickable {
+                                    selectedEvent = eventItem
+                                    resultText = ""
+                                },
                             shape = RoundedCornerShape(18.dp),
                             elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
                         ) {
@@ -167,6 +301,14 @@ fun PendingRequestsScreen(
                                 Text(
                                     text = eventItem.name,
                                     style = MaterialTheme.typography.titleMedium
+                                )
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                Text(
+                                    text = "Evento privado",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF4F67A8)
                                 )
 
                                 Spacer(modifier = Modifier.height(6.dp))
@@ -204,7 +346,11 @@ fun PendingRequestsScreen(
             subtitle = "Evento: ${selectedEvent!!.name}"
         ) {
             if (pendingParticipants.isEmpty()) {
-                Text(resultText)
+                Text(
+                    text = resultText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.DarkGray
+                )
             } else {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -220,11 +366,26 @@ fun PendingRequestsScreen(
                                 modifier = Modifier.padding(16.dp)
                             ) {
                                 Text(
-                                    text = "Usuario ID: ${participant.userId}",
+                                    text = participantName(participant),
                                     style = MaterialTheme.typography.titleMedium
                                 )
 
-                                Spacer(modifier = Modifier.height(10.dp))
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                Text(
+                                    text = "Usuario: ${participant.userName}",
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                Text(
+                                    text = "Estado: Pendiente",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF4F67A8)
+                                )
+
+                                Spacer(modifier = Modifier.height(12.dp))
 
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -232,96 +393,28 @@ fun PendingRequestsScreen(
                                 ) {
                                     Button(
                                         onClick = {
-                                            scope.launch {
-                                                val savedToken = tokenManager.getToken()
-
-                                                if (savedToken.isNullOrBlank()) {
-                                                    resultText = "No hay sesión activa"
-                                                    return@launch
-                                                }
-
-                                                val participantUserId = participant.userId.toIntOrNull()
-
-                                                if (participantUserId == null) {
-                                                    resultText = "No se pudo interpretar el ID del participante"
-                                                    return@launch
-                                                }
-
-                                                try {
-                                                    val response = RetrofitInstance.api.approveOrRejectParticipant(
-                                                        token = "Bearer $savedToken",
-                                                        request = ManageParticipantRequest(
-                                                            eventId = selectedEvent!!.id,
-                                                            userId = participantUserId,
-                                                            approve = true
-                                                        )
-                                                    )
-
-                                                    if (response.isSuccessful) {
-                                                        pendingParticipants =
-                                                            pendingParticipants.filterNot {
-                                                                it.userId == participant.userId
-                                                            }
-                                                        resultText = "Participante aprobado"
-                                                    } else {
-                                                        val errorText = response.errorBody()?.string().orEmpty()
-                                                        resultText = "Error al aprobar: ${response.code()} - $errorText"
-                                                    }
-                                                } catch (e: Exception) {
-                                                    resultText = "Excepción al aprobar: ${e.message}"
-                                                }
-                                            }
+                                            manageParticipant(
+                                                participant = participant,
+                                                approve = true
+                                            )
                                         },
                                         modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(14.dp)
+                                        shape = RoundedCornerShape(14.dp),
+                                        enabled = !isLoading
                                     ) {
                                         Text("Aprobar")
                                     }
 
-                                    Button(
+                                    OutlinedButton(
                                         onClick = {
-                                            scope.launch {
-                                                val savedToken = tokenManager.getToken()
-
-                                                if (savedToken.isNullOrBlank()) {
-                                                    resultText = "No hay sesión activa"
-                                                    return@launch
-                                                }
-
-                                                val participantUserId = participant.userId.toIntOrNull()
-
-                                                if (participantUserId == null) {
-                                                    resultText = "No se pudo interpretar el ID del participante"
-                                                    return@launch
-                                                }
-
-                                                try {
-                                                    val response = RetrofitInstance.api.approveOrRejectParticipant(
-                                                        token = "Bearer $savedToken",
-                                                        request = ManageParticipantRequest(
-                                                            eventId = selectedEvent!!.id,
-                                                            userId = participantUserId,
-                                                            approve = false
-                                                        )
-                                                    )
-
-                                                    if (response.isSuccessful) {
-                                                        pendingParticipants =
-                                                            pendingParticipants.filterNot {
-                                                                it.userId == participant.userId
-                                                            }
-                                                        resultText = "Participante rechazado"
-                                                    } else {
-                                                        val errorText = response.errorBody()?.string().orEmpty()
-                                                        resultText = "Error al rechazar: ${response.code()} - $errorText"
-                                                    }
-                                                } catch (e: Exception) {
-                                                    resultText = "Excepción al rechazar: ${e.message}"
-                                                }
-                                            }
+                                            manageParticipant(
+                                                participant = participant,
+                                                approve = false
+                                            )
                                         },
                                         modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(14.dp)
+                                        shape = RoundedCornerShape(14.dp),
+                                        enabled = !isLoading
                                     ) {
                                         Text("Rechazar")
                                     }
@@ -335,10 +428,14 @@ fun PendingRequestsScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             TextButton(
-                onClick = { selectedEvent = null },
+                onClick = {
+                    selectedEvent = null
+                    pendingParticipants = emptyList()
+                    resultText = ""
+                },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Volver a mis eventos")
+                Text("Volver a mis eventos privados")
             }
 
             TextButton(
@@ -350,7 +447,7 @@ fun PendingRequestsScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            if (resultText.isNotBlank()) {
+            if (resultText.isNotBlank() && pendingParticipants.isNotEmpty()) {
                 Text(
                     text = resultText,
                     style = MaterialTheme.typography.bodyMedium,

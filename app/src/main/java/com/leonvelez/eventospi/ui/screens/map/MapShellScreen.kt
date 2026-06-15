@@ -240,7 +240,8 @@ fun MapShellScreen(
                 MapEventCard(
                     event = selectedMapEvent,
                     isLoggedIn = isLoggedIn,
-                    isRegistered = registeredEventIds.contains(selectedMapEvent.id),
+                    isRegistered = registeredEventIds.contains(selectedMapEvent.id) &&
+                            !cancelledEventIds.contains(selectedMapEvent.id),
                     isCreator = isEventOwnedByUserName(
                         currentUserName = currentUserName,
                         event = selectedMapEvent

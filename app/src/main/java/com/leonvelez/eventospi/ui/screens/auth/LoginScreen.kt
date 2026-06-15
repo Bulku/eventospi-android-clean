@@ -34,6 +34,7 @@ import com.leonvelez.eventospi.data.remote.RetrofitInstance
 import com.leonvelez.eventospi.data.TokenManager
 import com.leonvelez.eventospi.ui.components.AuthScreenContainer
 import kotlinx.coroutines.launch
+import com.leonvelez.eventospi.data.model.UserLoginRequest
 
 @Composable
 fun LoginScreen(
@@ -120,8 +121,10 @@ fun LoginScreen(
                         resultText = "Iniciando sesión..."
 
                         val response = RetrofitInstance.api.login(
-                            email,
-                            password
+                            UserLoginRequest(
+                                email = email,
+                                password = password
+                            )
                         )
 
                         if (response.isSuccessful) {

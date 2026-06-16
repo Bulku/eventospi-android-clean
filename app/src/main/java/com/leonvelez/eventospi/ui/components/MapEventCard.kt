@@ -304,7 +304,7 @@ fun MarkerLegendCard() {
     // =========================================================
     // 1) TAMAÑO GENERAL DEL BLOQUE
     // =========================================================
-    val panelWidth = 133.dp          // Ancho total del bloque
+    val panelWidth = 205.dp          // Ancho total del bloque
     val panelStartPadding = 1.dp     // Separación desde el borde izquierdo
     val verticalSpacing = 3.dp       // Espacio entre filas
     val innerPadding = 6.dp          // Espacio interno del cuadro
@@ -313,23 +313,15 @@ fun MarkerLegendCard() {
     // 2) CUADRO / TRANSPARENCIA / BORDE
     // =========================================================
     val boxCorner = 12.dp
-    val boxBackground = Color.White.copy(alpha = 0.90f)   // Fondo del cuadro
-    val boxBorder = Color.Green.copy(alpha = 0.33f)       // Borde del cuadro
+    val boxBackground = Color.White.copy(alpha = 0.90f)
+    val boxBorder = Color.Green.copy(alpha = 0.33f)
     val boxBorderWidth = 1.dp
-
-    // Si quieres MÁS visible:
-    // val boxBackground = Color.White.copy(alpha = 0.25f)
-    // val boxBorder = Color.Black.copy(alpha = 0.10f)
-
-    // Si quieres MÁS tenue:
-    // val boxBackground = Color.White.copy(alpha = 0.10f)
-    // val boxBorder = Color.Black.copy(alpha = 0.03f)
 
     // =========================================================
     // 3) TAMAÑO Y ESTILO DEL TEXTO
     // =========================================================
     val titleFontSize = 18.sp
-    val itemFontSize = 15.sp
+    val itemFontSize = 14.sp
 
     val titleColor = Color.Black
     val itemColor = Color.Black
@@ -348,6 +340,7 @@ fun MarkerLegendCard() {
     // =========================================================
     val activeColor = Color(0xFF2E7D32)
     val registeredColor = Color(0xFF1565C0)
+    val cancelledColor = Color(0xFFD32F2F)
     val selectedColor = Color(0xFF7B1FA2)
 
     Box(
@@ -386,6 +379,7 @@ fun MarkerLegendCard() {
                         .size(dotSize)
                         .background(activeColor, CircleShape)
                 )
+
                 Text(
                     text = "Activo",
                     style = MaterialTheme.typography.bodySmall.copy(
@@ -405,6 +399,7 @@ fun MarkerLegendCard() {
                         .size(dotSize)
                         .background(registeredColor, CircleShape)
                 )
+
                 Text(
                     text = "Inscrito",
                     style = MaterialTheme.typography.bodySmall.copy(
@@ -422,8 +417,29 @@ fun MarkerLegendCard() {
                 Box(
                     modifier = Modifier
                         .size(dotSize)
+                        .background(cancelledColor, CircleShape)
+                )
+
+                Text(
+                    text = "Inscripción cancelada",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontWeight = itemWeight,
+                        color = itemColor,
+                        fontSize = itemFontSize
+                    )
+                )
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(rowSpacing)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(dotSize)
                         .background(selectedColor, CircleShape)
                 )
+
                 Text(
                     text = "Seleccionado",
                     style = MaterialTheme.typography.bodySmall.copy(
